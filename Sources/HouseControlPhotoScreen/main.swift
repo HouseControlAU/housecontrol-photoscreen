@@ -577,7 +577,7 @@ struct SettingsView: View {
 @main @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     let settings = AppSettings(); let updateChecker = UpdateChecker(); var slideshow: SlideshowController!; var settingsWindow: NSWindow?; var statusItem: NSStatusItem!; var idleTimer: Timer?
     static func main() { let app = NSApplication.shared; let delegate = AppDelegate(); app.delegate = delegate; app.setActivationPolicy(.accessory); app.run() }
-    func applicationDidFinishLaunching(_ notification: Notification) { updateChecker.checkIfDue(); slideshow = SlideshowController(settings: settings); slideshow.reindex(); statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength); let icon = NSImage(named: NSImage.applicationIconName); icon?.size = NSSize(width: 18, height: 18); statusItem.button?.image = icon; statusItem.button?.title = ""; statusItem.button?.imagePosition = .imageOnly; let menu = NSMenu(); menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")); menu.addItem(NSMenuItem(title: "Start PhotoScreen", action: #selector(start), keyEquivalent: "s")); menu.addItem(.separator()); menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")); statusItem.menu = menu; idleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.checkIdleStart() } }
+    func applicationDidFinishLaunching(_ notification: Notification) { updateChecker.checkIfDue(); slideshow = SlideshowController(settings: settings); slideshow.reindex(); statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength); let iconURL = Bundle.main.url(forResource: "HouseControlPhotoScreen", withExtension: "icns"); let icon = iconURL.flatMap { NSImage(contentsOf: $0) } ?? NSImage(named: NSImage.applicationIconName); icon?.size = NSSize(width: 18, height: 18); statusItem.button?.image = icon; statusItem.button?.title = ""; statusItem.button?.imagePosition = .imageOnly; let menu = NSMenu(); menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")); menu.addItem(NSMenuItem(title: "Start PhotoScreen", action: #selector(start), keyEquivalent: "s")); menu.addItem(.separator()); menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")); statusItem.menu = menu; idleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.checkIdleStart() } }
     private func mediaPlaybackLikelyActive() -> Bool {
         guard let frontmost = NSWorkspace.shared.frontmostApplication else { return false }
         let browserIDs = ["org.mozilla.firefox", "com.google.Chrome", "com.apple.Safari", "com.brave.Browser", "com.microsoft.edgemac"]
@@ -588,8 +588,13 @@ struct SettingsView: View {
         let mediaTerms = ["youtube", "netflix", "prime video", "disney+", "twitch", "vimeo", "video"]
         let display = CGDisplayBounds(CGMainDisplayID())
         let windows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
+        let mediaPIDs = Set(NSWorkspace.shared.runningApplications.compactMap { application -> Int32? in
+            guard let id = application.bundleIdentifier, (browserIDs + playerIDs).contains(id) else { return nil }
+            return application.processIdentifier
+        })
         return windows.contains { window in
-            guard let ownerPID = window[kCGWindowOwnerPID as String] as? Int, ownerPID == Int(frontmost.processIdentifier) else { return false }
+            guard let ownerPID = window[kCGWindowOwnerPID as String] as? Int,
+                  (ownerPID == Int(frontmost.processIdentifier) || mediaPIDs.contains(Int32(ownerPID))) else { return false }
             let title = (window[kCGWindowName as String] as? String ?? "").lowercased()
             if mediaTerms.contains(where: { title.contains($0) }) { return true }
             guard let boundsDictionary = window[kCGWindowBounds as String] as? NSDictionary,

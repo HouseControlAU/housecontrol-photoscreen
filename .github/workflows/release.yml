@@ -114,5 +114,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "$RELEASE_TAG" --generate-notes
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "$RELEASE_TAG" --generate-notes
+          fi
           gh release upload "$RELEASE_TAG" release-assets/*.deb release-assets/HouseControl-PhotoScreen-macos.zip --repo "$GITHUB_REPOSITORY" --clobber
