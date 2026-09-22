@@ -574,8 +574,9 @@ struct SettingsView: View {
 
 // MARK: - App delegate
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
+@main @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     let settings = AppSettings(); let updateChecker = UpdateChecker(); var slideshow: SlideshowController!; var settingsWindow: NSWindow?; var statusItem: NSStatusItem!; var idleTimer: Timer?
+    static func main() { let app = NSApplication.shared; let delegate = AppDelegate(); app.delegate = delegate; app.setActivationPolicy(.accessory); app.run() }
     func applicationDidFinishLaunching(_ notification: Notification) { updateChecker.checkIfDue(); slideshow = SlideshowController(settings: settings); slideshow.reindex(); statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength); let icon = NSImage(named: NSImage.applicationIconName); icon?.size = NSSize(width: 18, height: 18); statusItem.button?.image = icon; statusItem.button?.title = ""; statusItem.button?.imagePosition = .imageOnly; let menu = NSMenu(); menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")); menu.addItem(NSMenuItem(title: "Start PhotoScreen", action: #selector(start), keyEquivalent: "s")); menu.addItem(.separator()); menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")); statusItem.menu = menu; idleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.checkIdleStart() } }
     private func mediaPlaybackLikelyActive() -> Bool {
         guard let frontmost = NSWorkspace.shared.frontmostApplication else { return false }
@@ -603,7 +604,5 @@ struct SettingsView: View {
     @objc func start() { if !slideshow.isRunning, slideshow.start() { settingsWindow?.orderOut(nil) } }
     @objc func quit() { idleTimer?.invalidate(); NSApp.terminate(nil) }
 }
-
-@main struct HouseControlPhotoScreenApp: App { @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate; var body: some Scene { Settings { EmptyView() } } }
 
 extension Array { subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil } }
