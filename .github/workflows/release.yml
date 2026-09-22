@@ -82,6 +82,7 @@ jobs:
           cp Info.plist "$app/Contents/Info.plist"
           if [ -f HouseControlPhotoScreen.icns ]; then cp HouseControlPhotoScreen.icns "$app/Contents/Resources/HouseControlPhotoScreen.icns"; fi
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"
+          codesign --force --sign - "$app/MediaRemoteAdapter_MediaRemoteAdapter.bundle"
           codesign --force --sign - "$app/Contents/Frameworks/libMediaRemoteAdapter.dylib"
           codesign --force --sign - "$app"
           ditto -c -k --sequesterRsrc --keepParent "$app" "HouseControl-PhotoScreen-macos.zip"
