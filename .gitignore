@@ -10,12 +10,12 @@ make_icon
 *.icns
 *.iconset/
 linux/build/
+linux/dist/
 
 # IDE and OS files
 .DS_Store
 xcuserdata/
 *.xcuserstate
-linux/build/
 
 # Local caches and settings
 *.log

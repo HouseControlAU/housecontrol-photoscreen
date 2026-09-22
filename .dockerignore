@@ -1,0 +1,6 @@
+.git
+.build
+linux/build
+linux/dist
+*.app
+*.dmg
