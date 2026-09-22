@@ -77,7 +77,7 @@ jobs:
           mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks"
           cp "$bin" "$app/Contents/MacOS/housecontrol-photoscreen"
           cp "$(dirname "$bin")/libMediaRemoteAdapter.dylib" "$app/Contents/Frameworks/libMediaRemoteAdapter.dylib"
-          cp -R "$(dirname "$bin")/MediaRemoteAdapter_MediaRemoteAdapter.bundle" "$app/Contents/Resources/MediaRemoteAdapter_MediaRemoteAdapter.bundle"
+          cp -R "$(dirname "$bin")/MediaRemoteAdapter_MediaRemoteAdapter.bundle" "$app/MediaRemoteAdapter_MediaRemoteAdapter.bundle"
           install_name_tool -change "@rpath/libMediaRemoteAdapter.dylib" "@loader_path/../Frameworks/libMediaRemoteAdapter.dylib" "$app/Contents/MacOS/housecontrol-photoscreen"
           cp Info.plist "$app/Contents/Info.plist"
           if [ -f HouseControlPhotoScreen.icns ]; then cp HouseControlPhotoScreen.icns "$app/Contents/Resources/HouseControlPhotoScreen.icns"; fi
