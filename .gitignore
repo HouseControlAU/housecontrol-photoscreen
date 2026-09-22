@@ -1,0 +1,20 @@
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# macOS build products
+*.app/
+housecontrol-photoscreen
+make_icon
+*.icns
+*.iconset/
+
+# IDE and OS files
+.DS_Store
+xcuserdata/
+*.xcuserstate
+
+# Local caches and settings
+*.log
+.env
