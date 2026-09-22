@@ -51,8 +51,46 @@ jobs:
           path: linux/build/*.deb
           if-no-files-found: error
 
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Validate version
+        run: |
+          version="$(python3 -c 'from pathlib import Path; print(Path("VERSION.md").read_text().splitlines()[2].strip())')"
+          expected="v${version}"
+          if [ "$RELEASE_TAG" != "$expected" ]; then
+            printf 'Tag %s does not match VERSION.md (%s)\n' "$RELEASE_TAG" "$expected"
+            exit 1
+          fi
+
+      - name: Build macOS app archive
+        run: |
+          swift build -c release
+          version="$(python3 -c 'from pathlib import Path; print(Path("VERSION.md").read_text().splitlines()[2].strip())')"
+          bin="$(swift build -c release --show-bin-path)/housecontrol-photoscreen"
+          app="HouseControl PhotoScreen.app"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+          cp "$bin" "$app/Contents/MacOS/housecontrol-photoscreen"
+          cp Info.plist "$app/Contents/Info.plist"
+          cp HouseControlPhotoScreen.icns "$app/Contents/Resources/HouseControlPhotoScreen.icns"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"
+          codesign --force --deep --sign - "$app"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "HouseControl-PhotoScreen-macos.zip"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: housecontrol-photoscreen-macos
+          path: HouseControl-PhotoScreen-macos.zip
+          if-no-files-found: error
+
   publish:
-    needs: build-linux
+    needs: [build-linux, build-macos]
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -66,9 +104,15 @@ jobs:
           name: housecontrol-photoscreen-linux
           path: release-assets
 
+      - name: Download macOS package
+        uses: actions/download-artifact@v4
+        with:
+          name: housecontrol-photoscreen-macos
+          path: release-assets
+
       - name: Publish GitHub release and upload Linux package
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "$RELEASE_TAG" --generate-notes
-          gh release upload "$RELEASE_TAG" release-assets/*.deb --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$RELEASE_TAG" release-assets/*.deb release-assets/HouseControl-PhotoScreen-macos.zip --repo "$GITHUB_REPOSITORY" --clobber

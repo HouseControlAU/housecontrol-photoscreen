@@ -18,6 +18,7 @@ enum AppRelease {
     private static let checkInterval: TimeInterval = 24 * 60 * 60
     @Published private(set) var availableVersion: String?
     @Published private(set) var releaseURL: URL?
+    @Published private(set) var updateAssetURL: URL?
     @Published private(set) var status = "Not checked yet"
     @Published private(set) var isChecking = false
     let currentVersion = AppRelease.currentVersion
@@ -46,13 +47,53 @@ enum AppRelease {
                 }
                 let version = tag.trimmingCharacters(in: CharacterSet(charactersIn: "vV "))
                 self.releaseURL = url
+                if let assets = json["assets"] as? [[String: Any]],
+                   let asset = assets.first(where: { ($0["name"] as? String) == "HouseControl-PhotoScreen-macos.zip" }),
+                   let assetURL = asset["browser_download_url"] as? String {
+                    self.updateAssetURL = URL(string: assetURL)
+                } else {
+                    self.updateAssetURL = nil
+                }
                 if Self.isNewer(version, than: self.currentVersion) { self.availableVersion = version; self.status = "Update available" }
                 else { self.availableVersion = nil; self.status = "You are up to date" }
             }
         }.resume()
     }
 
-    func installUpdate() { if let releaseURL { NSWorkspace.shared.open(releaseURL) } }
+    func installUpdate() {
+        guard let updateAssetURL, let updateURL = URL(string: updateAssetURL.absoluteString) else { status = "No macOS update package is available"; return }
+        status = "Downloading update…"
+        URLSession.shared.downloadTask(with: updateURL) { [weak self] temporaryURL, _, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard error == nil, let temporaryURL else { self.status = "Update download failed"; return }
+                do { try self.stageAndLaunchUpdate(zipURL: temporaryURL) }
+                catch { self.status = "Update failed: \(error.localizedDescription)" }
+            }
+        }.resume()
+    }
+
+    private func stageAndLaunchUpdate(zipURL: URL) throws {
+        let fileManager = FileManager.default
+        let directory = fileManager.temporaryDirectory.appendingPathComponent("HouseControlPhotoScreen-update-\(UUID().uuidString)")
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let archive = directory.appendingPathComponent("update.zip")
+        try fileManager.copyItem(at: zipURL, to: archive)
+        let unzip = Process(); unzip.executableURL = URL(fileURLWithPath: "/usr/bin/ditto"); unzip.arguments = ["-x", "-k", archive.path, directory.path]; try unzip.run(); unzip.waitUntilExit()
+        guard unzip.terminationStatus == 0,
+              let appURL = fileManager.enumerator(at: directory, includingPropertiesForKeys: nil)?.first(where: { ($0 as? URL)?.pathExtension == "app" }) as? URL else { throw NSError(domain: "HouseControlPhotoScreen", code: 1, userInfo: [NSLocalizedDescriptionKey: "The downloaded update is not a valid app bundle"]) }
+        let executable = appURL.appendingPathComponent("Contents/MacOS/housecontrol-photoscreen")
+        guard fileManager.isExecutableFile(atPath: executable.path) else { throw NSError(domain: "HouseControlPhotoScreen", code: 2, userInfo: [NSLocalizedDescriptionKey: "The downloaded app executable is missing"]) }
+        let script = directory.appendingPathComponent("install-update.sh")
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let scriptBody = "#!/bin/sh\nsleep 1\nwhile kill -0 \(currentPID) 2>/dev/null; do sleep 1; done\n/usr/bin/ditto -- \(shellQuote(appURL.path)) \(shellQuote(Bundle.main.bundlePath))\n/usr/bin/open -- \(shellQuote(Bundle.main.bundlePath))\nrm -f \(shellQuote(script.path))\n"
+        try scriptBody.write(to: script, atomically: true, encoding: .utf8)
+        try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
+        let updater = Process(); updater.executableURL = URL(fileURLWithPath: "/bin/sh"); updater.arguments = [script.path]; updater.standardInput = FileHandle.nullDevice; updater.standardOutput = FileHandle.nullDevice; updater.standardError = FileHandle.nullDevice; try updater.run()
+        status = "Installing update…"; NSApp.terminate(nil)
+    }
+
+    private func shellQuote(_ value: String) -> String { "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 
     private static func isNewer(_ candidate: String, than installed: String) -> Bool {
         let lhs = candidate.split(separator: ".").map { Int($0.filter { $0.isNumber }) ?? 0 }
@@ -512,7 +553,7 @@ struct SettingsView: View {
                     Text("Current version: \(updateChecker.currentVersion)")
                     if let available = updateChecker.availableVersion {
                         Text("Version \(available) is available.").foregroundStyle(.orange)
-                        HStack { Button("Install Update") { updateChecker.installUpdate() }; Button("Check Again") { updateChecker.checkNow() }.disabled(updateChecker.isChecking) }
+                        HStack { Button(updateChecker.updateAssetURL == nil ? "Open Release Page" : "Install Update") { if updateChecker.updateAssetURL == nil { if let releaseURL = updateChecker.releaseURL { NSWorkspace.shared.open(releaseURL) } } else { updateChecker.installUpdate() } }; Button("Check Again") { updateChecker.checkNow() }.disabled(updateChecker.isChecking) }
                     } else {
                         HStack { Text(updateChecker.status).foregroundStyle(.secondary); Spacer(); Button("Check Now") { updateChecker.checkNow() }.disabled(updateChecker.isChecking) }
                     }
@@ -532,13 +573,21 @@ struct SettingsView: View {
     private func mediaPlaybackLikelyActive() -> Bool {
         guard let frontmost = NSWorkspace.shared.frontmostApplication else { return false }
         let browserIDs = ["org.mozilla.firefox", "com.google.Chrome", "com.apple.Safari", "com.brave.Browser", "com.microsoft.edgemac"]
-        guard browserIDs.contains(frontmost.bundleIdentifier ?? "") else { return false }
+        let playerIDs = ["org.videolan.vlc", "com.colliderli.iina", "io.mpv", "com.apple.QuickTimePlayerX"]
+        let bundleID = frontmost.bundleIdentifier ?? ""
+        let isBrowserOrPlayer = browserIDs.contains(bundleID) || playerIDs.contains(bundleID)
+        guard isBrowserOrPlayer else { return false }
         let mediaTerms = ["youtube", "netflix", "prime video", "disney+", "twitch", "vimeo", "video"]
+        let display = CGDisplayBounds(CGMainDisplayID())
         let windows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
         return windows.contains { window in
-            guard let ownerPID = window[kCGWindowOwnerPID as String] as? Int, ownerPID == Int(frontmost.processIdentifier), let title = window[kCGWindowName as String] as? String else { return false }
-            let normalized = title.lowercased()
-            return mediaTerms.contains { normalized.contains($0) }
+            guard let ownerPID = window[kCGWindowOwnerPID as String] as? Int, ownerPID == Int(frontmost.processIdentifier) else { return false }
+            let title = (window[kCGWindowName as String] as? String ?? "").lowercased()
+            if mediaTerms.contains(where: { title.contains($0) }) { return true }
+            guard let boundsDictionary = window[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: boundsDictionary) else { return false }
+            let fillsDisplay = bounds.width >= display.width * 0.95 && bounds.height >= display.height * 0.95
+            return fillsDisplay
         }
     }
     private func checkIdleStart() { let delay = settings.idleStartDelay; guard delay > 0, !slideshow.isRunning else { return }; let idle = min(CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .mouseMoved), CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown), CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown)); if idle >= delay, !mediaPlaybackLikelyActive() { start() } }
