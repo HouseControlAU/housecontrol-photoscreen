@@ -42,7 +42,7 @@ jobs:
         run: |
           cmake -S linux -B linux/build -DCMAKE_BUILD_TYPE=Release
           cmake --build linux/build --parallel
-          cpack --config linux/build/CPackConfig.cmake --verbose
+          cpack --config linux/build/CPackConfig.cmake --verbose -B linux/build
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
@@ -77,7 +77,7 @@ jobs:
           mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
           cp "$bin" "$app/Contents/MacOS/housecontrol-photoscreen"
           cp Info.plist "$app/Contents/Info.plist"
-          cp HouseControlPhotoScreen.icns "$app/Contents/Resources/HouseControlPhotoScreen.icns"
+          if [ -f HouseControlPhotoScreen.icns ]; then cp HouseControlPhotoScreen.icns "$app/Contents/Resources/HouseControlPhotoScreen.icns"; fi
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"
           codesign --force --deep --sign - "$app"
           ditto -c -k --sequesterRsrc --keepParent "$app" "HouseControl-PhotoScreen-macos.zip"
