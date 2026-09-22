@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=HouseControl PhotoScreen
+Comment=HouseControl photo slideshow
+Exec=housecontrol-photoscreen
+Terminal=false
+Categories=Graphics;Utility;

@@ -14,26 +14,61 @@ on:
 permissions:
   contents: write
 
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
 jobs:
-  release:
+  build-linux:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Validate version
-        env:
-          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
           version="$(python3 -c 'from pathlib import Path; print(Path("VERSION.md").read_text().splitlines()[2].strip())')"
           expected="v${version}"
-          if [ "$TAG" != "$expected" ]; then
-            printf 'Tag %s does not match VERSION.md (%s)\n' "$TAG" "$expected"
+          if [ "$RELEASE_TAG" != "$expected" ]; then
+            printf 'Tag %s does not match VERSION.md (%s)\n' "$RELEASE_TAG" "$expected"
             exit 1
           fi
 
-      - name: Publish GitHub release
+      - name: Install Linux build dependencies
+        run: sudo apt-get update && sudo apt-get install --yes build-essential cmake qt6-base-dev dpkg-dev
+
+      - name: Build Linux package
+        run: |
+          cmake -S linux -B linux/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build linux/build --parallel
+          cpack --config linux/build/CPackConfig.cmake --verbose
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: housecontrol-photoscreen-linux
+          path: linux/build/*.deb
+          if-no-files-found: error
+
+  publish:
+    needs: build-linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Download Linux package
+        uses: actions/download-artifact@v4
+        with:
+          name: housecontrol-photoscreen-linux
+          path: release-assets
+
+      - name: Publish GitHub release and upload Linux package
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
+        run: |
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "$RELEASE_TAG" --generate-notes
+          gh release upload "$RELEASE_TAG" release-assets/*.deb --repo "$GITHUB_REPOSITORY" --clobber

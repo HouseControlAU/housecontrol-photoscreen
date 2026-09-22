@@ -9,11 +9,13 @@ housecontrol-photoscreen
 make_icon
 *.icns
 *.iconset/
+linux/build/
 
 # IDE and OS files
 .DS_Store
 xcuserdata/
 *.xcuserstate
+linux/build/
 
 # Local caches and settings
 *.log

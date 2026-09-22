@@ -52,7 +52,8 @@ All notable user-visible changes to HouseControl PhotoScreen are recorded here.
 
 - Documented the Debian-based Linux port plan in `README.md`.
 - Defined the proposed shared core, Qt 6 UI, XDG paths, Trash behavior, Debian packaging, and X11/Wayland acceptance gates.
-- Linux support is documented as planned only; no Linux artifact is claimed yet.
+- Added the first Qt 6 Linux slideshow slice with CMake and a version-validated Debian package pipeline.
+- Linux support is still not a release; settings, deletion, metadata/OSD, startup integration, and Ansible deployment remain.
 
 ## Development process
 
