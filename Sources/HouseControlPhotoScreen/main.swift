@@ -84,6 +84,13 @@ enum AppRelease {
               let appURL = fileManager.enumerator(at: directory, includingPropertiesForKeys: nil)?.first(where: { ($0 as? URL)?.pathExtension == "app" }) as? URL else { throw NSError(domain: "HouseControlPhotoScreen", code: 1, userInfo: [NSLocalizedDescriptionKey: "The downloaded update is not a valid app bundle"]) }
         let executable = appURL.appendingPathComponent("Contents/MacOS/housecontrol-photoscreen")
         guard fileManager.isExecutableFile(atPath: executable.path) else { throw NSError(domain: "HouseControlPhotoScreen", code: 2, userInfo: [NSLocalizedDescriptionKey: "The downloaded app executable is missing"]) }
+        let confirmation = NSAlert()
+        confirmation.messageText = "Install update and restart PhotoScreen?"
+        confirmation.informativeText = "PhotoScreen will quit, replace its application bundle, and start again with the downloaded version."
+        confirmation.alertStyle = .informational
+        confirmation.addButton(withTitle: "Install and Restart")
+        confirmation.addButton(withTitle: "Cancel")
+        guard confirmation.runModal() == .alertFirstButtonReturn else { status = "Update cancelled"; return }
         let script = directory.appendingPathComponent("install-update.sh")
         let currentPID = ProcessInfo.processInfo.processIdentifier
         let scriptBody = "#!/bin/sh\nsleep 1\nwhile kill -0 \(currentPID) 2>/dev/null; do sleep 1; done\n/usr/bin/ditto -- \(shellQuote(appURL.path)) \(shellQuote(Bundle.main.bundlePath))\n/usr/bin/open -- \(shellQuote(Bundle.main.bundlePath))\nrm -f \(shellQuote(script.path))\n"
@@ -553,7 +560,7 @@ struct SettingsView: View {
                     Text("Current version: \(updateChecker.currentVersion)")
                     if let available = updateChecker.availableVersion {
                         Text("Version \(available) is available.").foregroundStyle(.orange)
-                        HStack { Button(updateChecker.updateAssetURL == nil ? "Open Release Page" : "Install Update") { if updateChecker.updateAssetURL == nil { if let releaseURL = updateChecker.releaseURL { NSWorkspace.shared.open(releaseURL) } } else { updateChecker.installUpdate() } }; Button("Check Again") { updateChecker.checkNow() }.disabled(updateChecker.isChecking) }
+                        HStack { Button("Install Update") { updateChecker.installUpdate() }.disabled(updateChecker.updateAssetURL == nil); Button("Check Again") { updateChecker.checkNow() }.disabled(updateChecker.isChecking) }
                     } else {
                         HStack { Text(updateChecker.status).foregroundStyle(.secondary); Spacer(); Button("Check Now") { updateChecker.checkNow() }.disabled(updateChecker.isChecking) }
                     }
