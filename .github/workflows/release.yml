@@ -82,7 +82,7 @@ jobs:
           cp Info.plist "$app/Contents/Info.plist"
           if [ -f HouseControlPhotoScreen.icns ]; then cp HouseControlPhotoScreen.icns "$app/Contents/Resources/HouseControlPhotoScreen.icns"; fi
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"
-          ditto -c -k --sequesterRsrc --keepParent "$app" "HouseControl-PhotoScreen-macos.zip"
+          /usr/bin/zip -qry "HouseControl-PhotoScreen-macos.zip" "$app"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4

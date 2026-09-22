@@ -95,7 +95,7 @@ enum AppRelease {
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         let archive = directory.appendingPathComponent("update.zip")
         try fileManager.copyItem(at: zipURL, to: archive)
-        let unzip = Process(); unzip.executableURL = URL(fileURLWithPath: "/usr/bin/ditto"); unzip.arguments = ["-x", "-k", archive.path, directory.path]; try unzip.run(); unzip.waitUntilExit()
+        let unzip = Process(); unzip.executableURL = URL(fileURLWithPath: "/usr/bin/unzip"); unzip.arguments = ["-q", archive.path, "-d", directory.path]; try unzip.run(); unzip.waitUntilExit()
         guard unzip.terminationStatus == 0,
               let appURL = fileManager.enumerator(at: directory, includingPropertiesForKeys: nil)?.first(where: { ($0 as? URL)?.pathExtension == "app" }) as? URL else { throw NSError(domain: "HouseControlPhotoScreen", code: 1, userInfo: [NSLocalizedDescriptionKey: "The downloaded update is not a valid app bundle"]) }
         let executable = appURL.appendingPathComponent("Contents/MacOS/housecontrol-photoscreen")
