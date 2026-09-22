@@ -7,7 +7,13 @@ let package = Package(
     products: [
         .executable(name: "housecontrol-photoscreen", targets: ["HouseControlPhotoScreen"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/ejbills/mediaremote-adapter.git", branch: "master")
+    ],
     targets: [
-        .executableTarget(name: "HouseControlPhotoScreen")
+        .executableTarget(
+            name: "HouseControlPhotoScreen",
+            dependencies: [.product(name: "MediaRemoteAdapter", package: "mediaremote-adapter")]
+        )
     ]
 )

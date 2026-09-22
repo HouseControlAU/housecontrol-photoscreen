@@ -74,8 +74,11 @@ jobs:
           version="$(python3 -c 'from pathlib import Path; print(Path("VERSION.md").read_text().splitlines()[2].strip())')"
           bin="$(swift build -c release --show-bin-path)/housecontrol-photoscreen"
           app="HouseControl PhotoScreen.app"
-          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks"
           cp "$bin" "$app/Contents/MacOS/housecontrol-photoscreen"
+          cp "$(dirname "$bin")/libMediaRemoteAdapter.dylib" "$app/Contents/Frameworks/libMediaRemoteAdapter.dylib"
+          cp -R "$(dirname "$bin")/MediaRemoteAdapter_MediaRemoteAdapter.bundle" "$app/Contents/Resources/MediaRemoteAdapter_MediaRemoteAdapter.bundle"
+          install_name_tool -change "@rpath/libMediaRemoteAdapter.dylib" "@loader_path/../Frameworks/libMediaRemoteAdapter.dylib" "$app/Contents/MacOS/housecontrol-photoscreen"
           cp Info.plist "$app/Contents/Info.plist"
           if [ -f HouseControlPhotoScreen.icns ]; then cp HouseControlPhotoScreen.icns "$app/Contents/Resources/HouseControlPhotoScreen.icns"; fi
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"

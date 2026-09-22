@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 import ServiceManagement
 import CoreLocation
 import QuartzCore
+import MediaRemoteAdapter
 
 // MARK: - Release updates
 
@@ -12,6 +13,21 @@ enum AppRelease {
     static let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
     static let repositoryURL = URL(string: "https://github.com/HouseControlAU/housecontrol-photoscreen")!
     static let latestReleaseAPI = URL(string: "https://api.github.com/repos/HouseControlAU/housecontrol-photoscreen/releases/latest")!
+}
+
+@MainActor final class MediaRemoteMonitor: ObservableObject {
+    private let controller = MediaController()
+    @Published private(set) var isPlaying = false
+
+    init() {
+        controller.onTrackInfoReceived = { [weak self] trackInfo in
+            let playing = trackInfo?.payload.isPlaying == true
+            Task { @MainActor [weak self] in self?.isPlaying = playing }
+        }
+        controller.startListening()
+    }
+
+    deinit { controller.stopListening() }
 }
 
 @MainActor final class UpdateChecker: ObservableObject {
@@ -575,10 +591,11 @@ struct SettingsView: View {
 // MARK: - App delegate
 
 @main @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
-    let settings = AppSettings(); let updateChecker = UpdateChecker(); var slideshow: SlideshowController!; var settingsWindow: NSWindow?; var statusItem: NSStatusItem!; var idleTimer: Timer?
+    let settings = AppSettings(); let updateChecker = UpdateChecker(); let mediaMonitor = MediaRemoteMonitor(); var slideshow: SlideshowController!; var settingsWindow: NSWindow?; var statusItem: NSStatusItem!; var idleTimer: Timer?
     static func main() { let app = NSApplication.shared; let delegate = AppDelegate(); app.delegate = delegate; app.setActivationPolicy(.accessory); app.run() }
     func applicationDidFinishLaunching(_ notification: Notification) { updateChecker.checkIfDue(); slideshow = SlideshowController(settings: settings); slideshow.reindex(); statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength); let iconURL = Bundle.main.url(forResource: "HouseControlPhotoScreen", withExtension: "icns"); let icon = iconURL.flatMap { NSImage(contentsOf: $0) } ?? NSImage(named: NSImage.applicationIconName); icon?.size = NSSize(width: 18, height: 18); statusItem.button?.image = icon; statusItem.button?.title = ""; statusItem.button?.imagePosition = .imageOnly; let menu = NSMenu(); menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")); menu.addItem(NSMenuItem(title: "Start PhotoScreen", action: #selector(start), keyEquivalent: "s")); menu.addItem(.separator()); menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")); statusItem.menu = menu; idleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.checkIdleStart() } }
     private func mediaPlaybackLikelyActive() -> Bool {
+        if mediaMonitor.isPlaying { return true }
         guard let frontmost = NSWorkspace.shared.frontmostApplication else { return false }
         let browserIDs = ["org.mozilla.firefox", "com.google.Chrome", "com.apple.Safari", "com.brave.Browser", "com.microsoft.edgemac"]
         let playerIDs = ["org.videolan.vlc", "com.colliderli.iina", "io.mpv", "com.apple.QuickTimePlayerX"]
