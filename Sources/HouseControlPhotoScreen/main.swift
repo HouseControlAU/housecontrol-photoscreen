@@ -134,7 +134,8 @@ enum AnimationStyle: String, CaseIterable, Identifiable { case fade, slide, zoom
 final class AppSettings: ObservableObject {
     private var isLoading = true
 
-    @Published var folder: URL? { didSet { if let folder { defaults.set(folder.standardizedFileURL.path, forKey: "folder") }; save() } }
+    @Published var folder: URL? { didSet { if let folder { beginFolderAccess(folder); defaults.set(folder.standardizedFileURL.path, forKey: "folder"); saveFolderBookmark(folder) }; save() } }
+    private var folderAccessURL: URL?
     @Published var deleteKeyCode = 51 { didSet { save() } }
     @Published var deleteKeyName = "Not set" { didSet { save() } }
     @Published var deleteEventType = "none" { didSet { save() } }
@@ -157,8 +158,15 @@ final class AppSettings: ObservableObject {
 
     private let defaults = UserDefaults.standard
     init() {
-
-        folder = defaults.string(forKey: "folder").map { URL(fileURLWithPath: $0) }
+        if let bookmark = defaults.data(forKey: "folderBookmark") {
+            var stale = false
+            if let resolved = try? URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &stale) {
+                folder = resolved
+                beginFolderAccess(resolved)
+                if stale { saveFolderBookmark(resolved) }
+            }
+        }
+        if folder == nil { folder = defaults.string(forKey: "folder").map { URL(fileURLWithPath: $0) } }
         deleteKeyCode = defaults.object(forKey: "deleteKeyCode") as? Int ?? 51
         deleteKeyName = defaults.string(forKey: "deleteKeyName") ?? "Not set"
         deleteEventType = defaults.string(forKey: "deleteEventType") ?? "none"
@@ -188,6 +196,19 @@ final class AppSettings: ObservableObject {
         isLoading = false
         save()
     }
+    private func beginFolderAccess(_ url: URL) {
+        if folderAccessURL?.standardizedFileURL == url.standardizedFileURL { return }
+        folderAccessURL?.stopAccessingSecurityScopedResource()
+        if url.startAccessingSecurityScopedResource() { folderAccessURL = url }
+    }
+    private func saveFolderBookmark(_ url: URL) {
+        guard let data = try? url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil) else {
+            NSLog("HouseControl PhotoScreen could not save security-scoped bookmark for %@", url.path)
+            return
+        }
+        defaults.set(data, forKey: "folderBookmark")
+    }
+    deinit { folderAccessURL?.stopAccessingSecurityScopedResource() }
     private func save() {
         guard !isLoading else { return }
         defaults.set(deleteKeyCode, forKey: "deleteKeyCode"); defaults.set(deleteKeyName, forKey: "deleteKeyName"); defaults.set(deleteEventType, forKey: "deleteEventType"); defaults.set(deleteEventSubtype, forKey: "deleteEventSubtype"); defaults.set(deleteEventData1, forKey: "deleteEventData1"); defaults.set(deleteEventButton, forKey: "deleteEventButton"); defaults.set(interval, forKey: "interval")
