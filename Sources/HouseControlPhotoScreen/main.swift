@@ -271,6 +271,13 @@ final class PhotoLibrary {
         }
     }
     static func delete(_ photo: PhotoItem, permanently: Bool) throws {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: photo.url.path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+            throw NSError(domain: "HouseControlPhotoScreen", code: 25, userInfo: [NSLocalizedDescriptionKey: "The selected photo no longer exists or is not a regular file"])
+        }
+        guard PhotoLibrary.extensions.contains(photo.url.pathExtension.lowercased()) else {
+            throw NSError(domain: "HouseControlPhotoScreen", code: 26, userInfo: [NSLocalizedDescriptionKey: "The selected file is not a supported image"])
+        }
         guard permanently else { try FileManager.default.trashItem(at: photo.url, resultingItemURL: nil); return }
         try FileManager.default.removeItem(at: photo.url)
     }
@@ -335,6 +342,7 @@ final class SlideshowController: NSObject, NSWindowDelegate {
     private var pendingDelete: PhotoItem?
     private var deleteCountdown = 0
     private var deleteCountdownTimer: Timer?
+    private var slideshowWasRunningBeforeDelete = false
     var isRunning: Bool { window != nil }
     private var deletionMessageToken = UUID()
     init(settings: AppSettings) { self.settings = settings }
@@ -477,25 +485,80 @@ extension SlideshowController {
     }
     private func deleteCurrent() {
         guard !deleteInProgress, pendingDelete == nil, photos.indices.contains(index) else { return }
-        let photo = photos[index]; pendingDelete = photo; deleteCountdown = 10; deletionOSD.stringValue = "Deleting file \(photo.url.lastPathComponent)\nPress any key to cancel\n\(deleteCountdown)"; deletionOSD.isHidden = false; positionDeletionOSD()
+        let photo = photos[index]
+        slideshowWasRunningBeforeDelete = timer != nil
+        timer?.invalidate(); timer = nil
+        pendingDelete = photo; deleteCountdown = 10; updateDeleteCountdownMessage(for: photo); deletionOSD.isHidden = false; positionDeletionOSD()
         deleteCountdownTimer?.invalidate()
         deleteCountdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.advanceDeleteCountdown() }
     }
+    private func updateDeleteCountdownMessage(for photo: PhotoItem) {
+        if deleteCountdown > 0 {
+            deletionOSD.stringValue = "Deleting in \(deleteCountdown)s: \(photo.url.lastPathComponent)\nPress any key to cancel"
+        } else {
+            deletionOSD.stringValue = "Deleting now: \(photo.url.lastPathComponent)"
+        }
+        positionDeletionOSD()
+    }
     private func advanceDeleteCountdown() {
         guard let photo = pendingDelete else { return }
-        deleteCountdown -= 1; deletionOSD.stringValue = "Deleting file \(photo.url.lastPathComponent)\nPress any key to cancel\n\(deleteCountdown)"; positionDeletionOSD()
+        deleteCountdown -= 1; updateDeleteCountdownMessage(for: photo)
         if deleteCountdown <= 0 { deleteCountdownTimer?.invalidate(); deleteCountdownTimer = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in guard let self, self.pendingDelete == photo else { return }; self.performDelete(photo) } }
     }
+    private func resumeSlideshowIfNeeded() {
+        guard slideshowWasRunningBeforeDelete, window != nil, !photos.isEmpty else { slideshowWasRunningBeforeDelete = false; return }
+        slideshowWasRunningBeforeDelete = false
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: max(5, settings.interval), repeats: true) { [weak self] _ in self?.next() }
+    }
     private func cancelPendingDelete() {
-        guard pendingDelete != nil else { return }; deleteCountdownTimer?.invalidate(); deleteCountdownTimer = nil; pendingDelete = nil; deletionOSD.isHidden = true; showCurrent()
+        guard pendingDelete != nil else { return }; deleteCountdownTimer?.invalidate(); deleteCountdownTimer = nil; pendingDelete = nil; deletionOSD.isHidden = true; resumeSlideshowIfNeeded(); showCurrent()
     }
     private func performDelete(_ photo: PhotoItem) {
-        guard !deleteInProgress else { return }; pendingDelete = nil; deleteInProgress = true; let permanently = settings.permanentDelete
+        guard !deleteInProgress else { return }
+        pendingDelete = nil; deleteInProgress = true; let permanently = settings.permanentDelete
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
                 try PhotoLibrary.delete(photo, permanently: permanently)
-                DispatchQueue.main.async { guard let self else { return }; self.photos.removeAll { $0.url == photo.url }; if self.photos.isEmpty { self.stop() } else { self.index = min(self.index, self.photos.count - 1); self.showCurrent(); self.deletionMessageToken = UUID(); let token = self.deletionMessageToken; self.deletionOSD.stringValue = "Deleted: \(photo.url.lastPathComponent)\n\(photo.url.path)"; self.deletionOSD.isHidden = false; self.positionDeletionOSD(); DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in guard let self, self.deletionMessageToken == token, self.window != nil else { return }; self.deletionOSD.isHidden = true; self.showCurrent() } }; self.deleteInProgress = false }
-            } catch { DispatchQueue.main.async { self?.deleteInProgress = false; NSSound.beep() } }
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.photos.removeAll { $0.url == photo.url }
+                    if self.photos.isEmpty {
+                        self.stop()
+                    } else {
+                        self.index = min(self.index, self.photos.count - 1)
+                        self.showCurrent()
+                        self.deletionMessageToken = UUID()
+                        let token = self.deletionMessageToken
+                        self.deletionOSD.stringValue = "Deleted: \(photo.url.lastPathComponent)"
+                        self.deletionOSD.isHidden = false
+                        self.positionDeletionOSD()
+                        self.resumeSlideshowIfNeeded()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+                            guard let self, self.deletionMessageToken == token, self.window != nil else { return }
+                            self.deletionOSD.isHidden = true
+                        }
+                    }
+                    self.deleteInProgress = false
+                }
+            } catch {
+                NSLog("HouseControl PhotoScreen deletion failed for %@: %@", photo.url.path, error.localizedDescription)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.deleteInProgress = false
+                    self.deletionMessageToken = UUID()
+                    let token = self.deletionMessageToken
+                    self.deletionOSD.stringValue = "Could not delete: \(photo.url.lastPathComponent)\n\(error.localizedDescription)"
+                    self.deletionOSD.isHidden = false
+                    self.positionDeletionOSD()
+                    self.resumeSlideshowIfNeeded()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                        guard let self, self.deletionMessageToken == token, self.window != nil else { return }
+                        self.deletionOSD.isHidden = true
+                    }
+                    NSSound.beep()
+                }
+            }
         }
     }
     private func rotateCurrent(clockwise: Bool) {
