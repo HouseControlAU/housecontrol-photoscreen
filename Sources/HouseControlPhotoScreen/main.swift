@@ -398,7 +398,7 @@ final class SlideshowController: NSObject, NSWindowDelegate {
         imageView.imageScaling = .scaleProportionallyUpOrDown; imageView.imageAlignment = .alignCenter; imageView.wantsLayer = true; imageView.frame = root.bounds; imageView.autoresizingMask = []; root.addSubview(imageView)
         let osdShadow = { () -> NSShadow in let s = NSShadow(); s.shadowColor = NSColor.black.withAlphaComponent(0.85); s.shadowBlurRadius = 8; s.shadowOffset = NSSize(width: 0, height: -2); return s }()
         osd.textColor = .white; osd.alignment = .left; osd.font = .systemFont(ofSize: 15, weight: .medium); osd.backgroundColor = .clear; osd.isBezeled = false; osd.drawsBackground = false; osd.shadow = osdShadow; osd.lineBreakMode = .byWordWrapping; osd.maximumNumberOfLines = 4
-        deletionOSD.textColor = .white; deletionOSD.alignment = .center; deletionOSD.font = .systemFont(ofSize: 15, weight: .medium); deletionOSD.backgroundColor = .clear; deletionOSD.isBezeled = false; deletionOSD.drawsBackground = false; deletionOSD.shadow = osdShadow; deletionOSD.lineBreakMode = .byWordWrapping; deletionOSD.maximumNumberOfLines = 3; deletionOSD.isHidden = true
+        deletionOSD.textColor = .white; deletionOSD.alignment = .right; deletionOSD.font = .systemFont(ofSize: 15, weight: .medium); deletionOSD.backgroundColor = .clear; deletionOSD.isBezeled = false; deletionOSD.drawsBackground = false; deletionOSD.shadow = osdShadow; deletionOSD.lineBreakMode = .byWordWrapping; deletionOSD.maximumNumberOfLines = 3; deletionOSD.isHidden = true
         clockOSD.textColor = .white; clockOSD.alignment = .left; clockOSD.drawsBackground = false; clockOSD.isBezeled = false; clockOSD.maximumNumberOfLines = 2; clockOSD.shadow = { let s = NSShadow(); s.shadowColor = NSColor.black.withAlphaComponent(0.8); s.shadowBlurRadius = 8; s.shadowOffset = NSSize(width: 0, height: -2); return s }()
         clockPanel.wantsLayer = true; clockPanel.layer?.backgroundColor = NSColor.clear.cgColor; clockPanel.alphaValue = settings.showTime ? 0.88 : 0
         let monitorMask: NSEvent.EventTypeMask = settings.deleteEventType == "mouse" ? [.keyDown, .systemDefined, .leftMouseDown, .rightMouseDown, .otherMouseDown] : [.keyDown, .systemDefined]
@@ -471,8 +471,10 @@ final class SlideshowController: NSObject, NSWindowDelegate {
     }
     private func positionDeletionOSD() {
         guard let content = window?.contentView else { return }
-        let margin: CGFloat = 20; let width = max(0, content.bounds.width - margin * 2); let lineHeight: CGFloat = 20; let height = min(max(lineHeight * 3 + 20, deletionOSD.fittingSize.height + 20), max(40, content.bounds.height - margin * 2)); let y = (content.bounds.height - height) / 2
-        deletionOSD.frame = NSRect(x: margin, y: y, width: width, height: height)
+        let margin: CGFloat = 30
+        let width = min(560, max(280, content.bounds.width * 0.38))
+        let height = min(max(50, deletionOSD.fittingSize.height + 20), max(50, content.bounds.height - margin * 2))
+        deletionOSD.frame = NSRect(x: content.bounds.width - width - margin, y: margin, width: width, height: height)
     }
     func windowShouldClose(_ sender: NSWindow) -> Bool { stop(); return true }
 }
